@@ -1,8 +1,11 @@
 package zio.actor
 
-import zio._
 import java.io.ObjectOutputStream
 import java.io.ObjectInputStream
+
+import zio.nio.channels.AsynchronousSocketChannel
+import zio.nio.{ InetAddress, InetSocketAddress }
+import zio._
 
 sealed trait ActorRef[-F[+_]] extends Serializable {
 
