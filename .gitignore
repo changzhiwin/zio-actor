@@ -1,0 +1,15 @@
+*.class
+*.log
+
+.metals/
+.vscode/
+
+logs/
+
+project/boot/
+project/plugins/project/
+project/*-shim.sbt
+project/project/
+project/target/
+
+target/
