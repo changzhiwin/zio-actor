@@ -13,36 +13,37 @@ sealed trait ActorRef[-F[+_]] extends Serializable {
 
   def ![A](fa: F[A]): Task[Unit]
 
-  val path: UIO[String]
+  val uri: UIO[String]
 
   val stop: Task[Chunk[_]]
 }
 
-private[actor] sealed abstract class ActorRefSerial[-F[+_]](private var actorPath: String) extends ActorRef[F] {
+private[actor] sealed abstract class ActorRefSerial[-F[+_]](private var uri: String) extends ActorRef[F] {
+
+  import Utils._
 
   def writeObject(out: ObjectOutputStream): Unit =
-    out.writeObject(actorPath)
+    out.writeObject(uri)
 
   def readObject(in: ObjectInputStream):Unit = {
-    val rawActorPath = in.readObject()
-    actorPath = rawActorPath.asInstanceOf[String]
+    val rawValue = in.readObject()
+    uri = rawValue.asInstanceOf[String]
   }
 
-  // 需要解析地址
   def readResolve(): Object = {
-    val remoteRef = for {
-      resolved           <- ???(actorPath)
-      (_, addr, port, _) = resolved
-      ip                 <- InetAddress.byName()
-      address            <- InetSocketAddress.inetAddress(ip, port)
+    val remoteRefZIO = for {
+      resolved      <- resolveActorURI(uri)
+      (_, remote, _) = resolved
+      host          <- InetAddress.byName(remote.host)
+      address       <- InetSocketAddress.inetAddress(host, remote.port)
     } yield new ActorRefRemote[F](actorPath, address)
 
     Unsafe.unsafe { implicit u =>
-      Runtime.default.unsafe.run(remoteRef).getOrThrowFiberFailure()
+      Runtime.default.unsafe.run(remoteRefZIO).getOrThrowFiberFailure()
     }
   }
 
-  override val path: UIO[String] = ZIO.succeed(actorPath)
+  override val uri: UIO[String] = ZIO.succeed(uri)
 }
 
 private[actor] final class ActorRefLocal[-F[+_]](
@@ -62,6 +63,8 @@ private[actor] final class ActorRefRemote[-F[+_]](
   address: InetSocketAddress
 ) extends ActorRefSerial[F](actorName) {
 
+  import Utils._
+
   override def ?[A](fa: F[A]): Task[A] = sendEnvelope[A](Command.Ask(fa))
 
   override def ![A](fa: F[A]): Task[Unit] = sendEnvelope[Unit](Command.Tell(fa))
@@ -73,11 +76,11 @@ private[actor] final class ActorRefRemote[-F[+_]](
       for {
         client   <- AsynchronousSocketChannel.open
         response <- for {
-                      _         <- client.connect(address)
-                      actorPath <- path
-                      _         <- writeToRemote(client, Envelope(command, actorPath))
-                      response  <- readFromRemote(client)
-                    } yield response.asInstanceOf[Either[Throwable, A]]
+                      _           <- client.connect(address)
+                      receiverURI <- uri
+                      _           <- writeToRemote(client, Envelope(command, receiverURI))
+                      response    <- readFromRemote(client)
+                    } yield response.asInstanceOf[Either[Throwable, A]]   // 因为写的时候都转化成Either对象
         result   <- ZIO.fromEither(response)
       } yield result
     }

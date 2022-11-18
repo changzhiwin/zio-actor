@@ -1,6 +1,9 @@
 package zio.actor
 
 import zio._
+import zio.actor.Command.Ask
+import zio.actor.Command.Tell
+import zio.actor.Command.Stop
 
 object Actor {
 
@@ -8,7 +11,7 @@ object Actor {
 
   private[actor] trait AbstractStateful[R, S, -F[+_]] {
 
-    def makeActor(
+    private[actor] def makeActor(
       supervisor: Supervisor[R],
       context: Context,
       optOutActorSystem: () => Task[Unit],
@@ -29,7 +32,6 @@ object Actor {
       optOutActorSystem: () => Task[Unit],
       mailboxSize: Int = 10000
     )(init: S): RIO[R, Actor[F]] = {
-
       for {
         state <- Ref.make(init)
         queue <- Queue.bounded[AsyncMessage[F, _]](mailboxSize)
@@ -40,23 +42,26 @@ object Actor {
     }
 
     private def process[A](
-        msg: AsyncMessage[F, A], 
-        state: Ref[S], 
-        supervisor: Supervisor[R],
-        context: Context): UIO[R, Unit] = for {
-      //TODO
-      s <- state.get
-      (fa, promise) = msg
-      _ <- receive(s, fa, context).fold(
-             e => {},
-             sa => state.update(sa._1) *> promise.success(sa._2)
-           )
-    } yield ()
+      msg: AsyncMessage[F, A], 
+      state: Ref[S], 
+      supervisor: Supervisor[R],
+      context: Context
+    ): UIO[R, Unit] = {
+      for {
+        s <- state.get
 
+        (fa, promise) = msg
+        _ <- receive(s, fa, context).fold(
+              e => ZIO.log(e) *> promise.fail(e) *> ZIO.unit,
+              sa => state.update(sa._1) *> promise.success(sa._2) *> ZIO.unit
+            )
+      } yield ()
+    }
   }
 
 }
 
+// 注意private声明，class Actor本身是不对外暴漏的
 private[actor] final class Actor[-F[+_]](
   queue: Queue[AsyncMessage]
 )(optOutActorSystem: () => Task[Unit]) {
@@ -79,4 +84,10 @@ private[actor] final class Actor[-F[+_]](
     _    <- queue.shutdown
     _    <- optOutActorSystem()
   } yield tall
+
+  def unsafeOp(command: Command): Task[Any] = command match {
+    case Ask(msg)  => this ? msg.asInstanceOf[F[_]]
+    case Tell(msg) => this ! msg.asInstanceOf[F[_]]
+    case Stop      => this.stop
+  }
 }

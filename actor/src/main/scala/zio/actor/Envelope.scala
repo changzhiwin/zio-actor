@@ -1,6 +1,7 @@
 package zio.actor
 
-private[actor] final case class Envelope(command: Command, recipient: String) extends Serializable
+// old: recipient
+private[actor] final case class Envelope(command: Command, receiverURI: String) extends Serializable
 
 private[actor] sealed trait Command
 
