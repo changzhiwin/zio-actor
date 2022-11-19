@@ -100,7 +100,7 @@ final class ActorSystem private[actor] (
       p       <- Promise.make[Nothing, Unit]
       _       <- self.listenFiber(address, p).fork
       _       <- p.await
-      _       <- ZIO.log(s"Listen at ${host}:${port}")
+      _       <- ZIO.log(s"ActorSystem-${actorSystemName}, listen at ${host}:${port}")
     } yield ()
   }
 

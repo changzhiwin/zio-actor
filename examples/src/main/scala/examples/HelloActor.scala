@@ -33,7 +33,10 @@ object HelloActor extends ZIOAppDefault {
     subActor    <- subSystem.select[Operator]("zio://main@0.0.0.0:7071/counter")
     result      <- subActor ? Result
     _           <- ZIO.log(s"remote result = ${result}")
-    _           <- ZIO.sleep(10.second)
+    _           <- ZIO.sleep(5.second)
+    _           <- subSystem.shutdown.debug("sub")
+    _           <- actor.stop.debug("stop")
+    _           <- mainSystem.shutdown.debug("main")
   } yield ()
 
   def run = program
