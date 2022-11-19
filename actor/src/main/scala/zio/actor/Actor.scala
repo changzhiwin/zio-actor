@@ -1,9 +1,9 @@
 package zio.actor
 
-import zio._
-import zio.actor.Command.Ask
-import zio.actor.Command.Tell
-import zio.actor.Command.Stop
+import zio.{ Supervisor => _, _ }
+import zio.actor.Command.{ Ask, Tell, Stop }
+
+import Actor.AsyncMessage
 
 object Actor {
 
@@ -32,38 +32,56 @@ object Actor {
       optOutActorSystem: () => Task[Unit],
       mailboxSize: Int = 10000
     )(init: S): RIO[R, Actor[F]] = {
+
+      def process[A](
+        msg: AsyncMessage[F, A], 
+        state: Ref[S]
+      ): RIO[R, Unit] = {
+        for {
+          s <- state.get
+          (fa, promise) = msg
+          _ <- receive(s, fa, context).foldZIO(
+                e => ZIO.log(s"${e}") *> promise.fail(e) *> ZIO.unit,
+                sa => state.set(sa._1) *> promise.succeed(sa._2) *> ZIO.unit
+              )
+        } yield ()
+      }
+
       for {
         state <- Ref.make(init)
         queue <- Queue.bounded[AsyncMessage[F, _]](mailboxSize)
-        _     <- queue.take.flatMap { msg =>
-                   process(msg, state, supervisor, context)
-                 }.forever.fork
+        _     <- (queue.take.flatMap { msg =>
+                   process(msg, state)
+                 }).forever.fork
       } yield new Actor[F](queue)(optOutActorSystem)
     }
 
+    /*
+    // 很奇怪，process放在外面定义，会导致编译错误；放到里面定义就可以
     private def process[A](
       msg: AsyncMessage[F, A], 
       state: Ref[S], 
       supervisor: Supervisor[R],
       context: Context
-    ): UIO[R, Unit] = {
+    ): RIO[R, Unit] = {
       for {
         s <- state.get
 
         (fa, promise) = msg
         _ <- receive(s, fa, context).fold(
-              e => ZIO.log(e) *> promise.fail(e) *> ZIO.unit,
-              sa => state.update(sa._1) *> promise.success(sa._2) *> ZIO.unit
+              e => ZIO.log(s"${e}") *> promise.fail(e) *> ZIO.unit,
+              sa => state.set(sa._1) *> promise.succeed(sa._2) *> ZIO.unit
             )
       } yield ()
     }
+    */
   }
 
 }
 
 // 注意private声明，class Actor本身是不对外暴漏的
 private[actor] final class Actor[-F[+_]](
-  queue: Queue[AsyncMessage]
+  queue: Queue[AsyncMessage[F, _]]
 )(optOutActorSystem: () => Task[Unit]) {
 
   // 请求 & 响应
@@ -74,7 +92,7 @@ private[actor] final class Actor[-F[+_]](
   } yield value
 
   // 请求 & 不管
-  def !(fa: F[A]): Task[Unit] = for {
+  def ![A](fa: F[A]): Task[Unit] = for {
     promise <- Promise.make[Throwable, A]
     _       <- queue.offer(fa -> promise)
   } yield ()

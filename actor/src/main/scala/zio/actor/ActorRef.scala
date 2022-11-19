@@ -1,7 +1,6 @@
 package zio.actor
 
-import java.io.ObjectOutputStream
-import java.io.ObjectInputStream
+import java.io.{ IOException, ObjectStreamException, ObjectOutputStream, ObjectInputStream }
 
 import zio.nio.channels.AsynchronousSocketChannel
 import zio.nio.{ InetAddress, InetSocketAddress }
@@ -18,32 +17,35 @@ sealed trait ActorRef[-F[+_]] extends Serializable {
   val stop: Task[Chunk[_]]
 }
 
-private[actor] sealed abstract class ActorRefSerial[-F[+_]](private var uri: String) extends ActorRef[F] {
+private[actor] sealed abstract class ActorRefSerial[-F[+_]](private var fullName: String) extends ActorRef[F] {
 
   import Utils._
 
+  @throws[IOException]
   def writeObject(out: ObjectOutputStream): Unit =
-    out.writeObject(uri)
+    out.writeObject(fullName)
 
+  @throws[IOException]
   def readObject(in: ObjectInputStream):Unit = {
     val rawValue = in.readObject()
-    uri = rawValue.asInstanceOf[String]
+    fullName = rawValue.asInstanceOf[String]
   }
 
+  @throws[ObjectStreamException]
   def readResolve(): Object = {
     val remoteRefZIO = for {
-      resolved      <- resolveActorURI(uri)
+      resolved      <- resolveActorURI(fullName)
       (_, remote, _) = resolved
       host          <- InetAddress.byName(remote.host)
       address       <- InetSocketAddress.inetAddress(host, remote.port)
-    } yield new ActorRefRemote[F](actorPath, address)
+    } yield new ActorRefRemote[F](fullName, address)
 
     Unsafe.unsafe { implicit u =>
       Runtime.default.unsafe.run(remoteRefZIO).getOrThrowFiberFailure()
     }
   }
 
-  override val uri: UIO[String] = ZIO.succeed(uri)
+  override val uri: UIO[String] = ZIO.succeed(fullName)
 }
 
 private[actor] final class ActorRefLocal[-F[+_]](
@@ -80,7 +82,7 @@ private[actor] final class ActorRefRemote[-F[+_]](
                       receiverURI <- uri
                       _           <- writeToRemote(client, Envelope(command, receiverURI))
                       response    <- readFromRemote(client)
-                    } yield response.asInstanceOf[Either[Throwable, A]]   // 因为写的时候都转化成Either对象
+                    } yield response.asInstanceOf[Either[Throwable, A]]   // 因为发送端都转化成Either对象
         result   <- ZIO.fromEither(response)
       } yield result
     }

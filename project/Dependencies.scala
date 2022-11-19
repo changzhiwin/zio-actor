@@ -6,7 +6,7 @@ object Dependencies {
   val ScalaCompactCollectionVersion = "2.8.1"
   val ZioVersion                    = "2.0.3"
   val ZioNioVersion                 = "2.0.0"
-  val ZioConfigVersion              = "3.0.4"
+  val ZioConfigVersion              = "3.0.2"
 
   val `scala-compact-collection` = "org.scala-lang.modules" %% "scala-collection-compat" % ScalaCompactCollectionVersion
 

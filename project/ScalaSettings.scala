@@ -56,7 +56,7 @@ trait ScalaSettings {
     "-Xlint:valpattern",         // Enable pattern checks in val definitions.
     "-Xlint:eta-zero",           // Warn on eta-expansion (rather than auto-application) of zero-ary method.
     "-Xlint:eta-sam", // Warn on eta-expansion to meet a Java-defined functional interface that is not explicitly annotated with @FunctionalInterface.
-    "-Wdead-code",       // Warn when dead code is identified.
+//    "-Wdead-code",       // Warn when dead code is identified.
     "-Wextra-implicit",  // Warn when more than one implicit parameter section is defined.
     "-Wmacros:after",    // Lints code before and after applying a macro
     "-Wnumeric-widen",   // Warn when numerics are widened.

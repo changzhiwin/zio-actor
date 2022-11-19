@@ -30,7 +30,7 @@ private[actor] object Utils {
         ZIO.fail(new java.lang.Exception("Invalid Actor URI, must [zio://YOUR_ACTOR_SYSTEM_NAME@HOST:PORT/RELATIVE_ACTOR_PATH]"))
     }
 
-  def buildAbsolutePath(parentActorName: String, actorName: String): Task[Stirng] =
+  def buildAbsolutePath(parentActorName: String, actorName: String): Task[String] =
     actorName match {
       case ""            => ZIO.fail(new Exception("Actor actor must not be empty"))
       case null          => ZIO.fail(new Exception("Actor actor must not be null"))
@@ -39,16 +39,16 @@ private[actor] object Utils {
     }
 
   def buildActorURI(actorSystemName: String, actorPath: String, remoteConfig: Option[RemoteConfig]): String =
-    s"zio://${actorSystemName}@${remoteConfig.fold("0.0.0.0:0000", c => c.host + ":" + c.port)}${actorPath}"
+    s"zio://${actorSystemName}@${remoteConfig.fold("0.0.0.0:0000")(c => (c.host + ":" + c.port))}${actorPath}"
 
   def objFromByteArray(bytes: Array[Byte]): Task[Any] =
     ZIO.scoped {
       ZIO.fromAutoCloseable(
-        ZIO.attemp(
+        ZIO.attempt(
           new ObjectInputStream(new ByteArrayInputStream(bytes))
         )
       ).flatMap { s =>
-        ZIO.attemp(s.readObject())
+        ZIO.attempt(s.readObject())
       }
     }
 
@@ -68,14 +68,14 @@ private[actor] object Utils {
       stream <- ZIO.succeed(new ByteArrayOutputStream())
       bytes  <- ZIO.scoped {
                   ZIO.fromAutoCloseable(
-                    ZIO.attemp(
+                    ZIO.attempt(
                       new ObjectOutputStream(stream)
                     )
                   ).flatMap { s =>
-                    ZIO.attemp(s.writeObject(obj)) *> ZIO.succeed(stream.toByteArray)
+                    ZIO.attempt(s.writeObject(obj)) *> ZIO.succeed(stream.toByteArray)
                   }
                 }
-      _      <- stream.close
+      _      <- ZIO.attempt(stream.close())
     } yield bytes
 
   def writeToRemote(socket: AsynchronousSocketChannel, obj: Any): Task[Unit] =

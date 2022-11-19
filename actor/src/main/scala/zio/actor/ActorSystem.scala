@@ -1,28 +1,28 @@
 package zio.actor
 
-import zio._
+import zio.{ Supervisor => _, _ }
 import zio.nio.channels.{ AsynchronousServerSocketChannel }
 import zio.nio.{ Buffer, InetAddress, InetSocketAddress }
 
 import ActorConfig._
 import Utils._
+import Actor._
 
 object ActorSystem {
 
   def apply(sysName: String): Task[ActorSystem] =
     for {
-      actorMap  <- Ref.make(Map.empty[String, Actor])
+      actorMap     <- Ref.make(Map.empty[String, Actor[Any]])
       remoteConfig <- ActorConfig.getRemoteConfig(sysName)
-      actorSystem  <- ZIO.attemp(new ActorSystem(sysName, Some(remoteConfig), actorMap))
-      _            <- actorSystem.receiveLoop(remoteConfig.host, remoteConfig.port)
+      actorSystem  <- ZIO.attempt(new ActorSystem(sysName, remoteConfig, actorMap))
+      _            <- remoteConfig.fold[Task[Unit]](ZIO.logWarning("No listen port, only work locally."))(c => actorSystem.receiveLoop(c.host, c.port))
     } yield actorSystem
 }
 
 final class ActorSystem private[actor] (
   val actorSystemName: String,
   remoteConfig: Option[RemoteConfig],
-  actorMap: Ref[Map[String, Actor]],
-  //parentActor: Option[String]
+  actorMap: Ref[Map[String, Actor[Any]]],
 ) { self =>
 
   def make[R, S, F[+_]](
@@ -31,21 +31,21 @@ final class ActorSystem private[actor] (
     initialState: S,
     stateful: AbstractStateful[R, S, F],
     parent: Option[String] = None
-  ): RIO[R, ActorRef[F]] = {
+  ): ZIO[R, Throwable, ActorRef[F]] = {
 
     for {
       map         <- actorMap.get
-      actorPath   <- buildAbsolutePath(parent.getOrElse(""), actorName)
-      _           <- ZIO.fail(s"Actor ${actorPath} already exists.").when(map.contains(actorPath))
+      actorPath   <- buildAbsolutePath(parent.getOrElse(""), actorName).debug("actorPath")
+      _           <- ZIO.fail(new Exception(s"Actor ${actorPath} already exists.")).when(map.contains(actorPath))
 
       uri          = buildActorURI(actorSystemName, actorPath, remoteConfig)
       childrenRef <- Ref.make(Set.empty[ActorRef[Any]])
       actor       <- stateful.makeActor(
                        sup, 
                        new Context(uri, self, childrenRef),
-                       () => dropFromActorMap(uri, childrenRef)
+                       () => self.dropFromActorMap(uri, childrenRef)
                      )(initialState)
-      _           <- actorMap.update(_.concat(Map(actorPath -> actor)))
+      _           <- actorMap.update(_.concat(Map(actorPath -> actor.asInstanceOf[Actor[Any]])))
     } yield new ActorRefLocal[F](uri, actor)
   }
 
@@ -69,10 +69,10 @@ final class ActorSystem private[actor] (
                       for {
                         map   <- actorMap.get
                         actor <- map.get(actorPath)
-                                    .fold(
+                                    .fold[Task[Actor[F]]](
                                       ZIO.fail(new Exception(s"No such actor ${actorPath}"))
                                     )(
-                                      a => ZIO.succeed(a)
+                                      a => ZIO.attempt(a.asInstanceOf[Actor[F]])
                                     )
                       } yield new ActorRefLocal[F](uri, actor)
                     },
@@ -96,10 +96,11 @@ final class ActorSystem private[actor] (
   private def receiveLoop(host: String, port: Int): Task[Unit] = ZIO.scoped {
     for {
       addr    <- InetAddress.byName(host)
-      address <- InetSocketAddress.inetAddress(add, port)
+      address <- InetSocketAddress.inetAddress(addr, port)
       p       <- Promise.make[Nothing, Unit]
-      _       <- listenFiber(address, p).fork
+      _       <- self.listenFiber(address, p).fork
       _       <- p.await
+      _       <- ZIO.log(s"Listen at ${host}:${port}")
     } yield ()
   }
 
@@ -112,17 +113,19 @@ final class ActorSystem private[actor] (
     } yield ()
   }
 
-  private def workFiber(channel: AsynchronousServerSocketChannel): Task[Unit] = for {
-    connection <- channel.accept
-    envelope   <- readFromRemote(connection).map(_.asInstanceOf[Envelope])
-    map        <- actorMap.get
-    actorOpt   <- resolveActorURI(envelope.receiverURI).map(tp => map.get(tp._3))
-    _          <- actorOpt.fold(
-                    writeToRemote(connection, Left(new Exception("No such remote actor")))
-                  )(
-                    actor => actor.unsafeOp(envelope.command).either.flatMap { eh =>
-                      writeToRemote(connection, eh)
-                    }
-                  )
-  } yield ()
+  private def workFiber(channel: AsynchronousServerSocketChannel): Task[Unit] = ZIO.scoped {
+    for {
+      connection <- channel.accept
+      envelope   <- readFromRemote(connection).map(_.asInstanceOf[Envelope])
+      map        <- actorMap.get
+      actorOpt   <- resolveActorURI(envelope.receiverURI).map(tp => map.get(tp._3))
+      _          <- actorOpt.fold(
+                      writeToRemote(connection, Left(new Exception("No such remote actor")))
+                    )(
+                      actor => actor.unsafeOp(envelope.command).either.flatMap { eh =>
+                        writeToRemote(connection, eh)
+                      }
+                    )
+    } yield ()
+  }
 }
