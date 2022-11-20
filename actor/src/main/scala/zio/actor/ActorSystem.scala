@@ -22,7 +22,7 @@ object ActorSystem {
 final class ActorSystem private[actor] (
   val actorSystemName: String,
   remoteConfig: Option[RemoteConfig],
-  actorMap: Ref[Map[String, Actor[Any]]],
+  actorMap: Ref[Map[String, _ <: Actor[Any]]],   // 限制value是Actor[Any]子类或本身类型
 ) { self =>
 
   def make[R, S, F[+_]](
