@@ -39,10 +39,19 @@ object Actor {
       ): RIO[R, Unit] = {
         for {
           s <- state.get
+
           (fa, promise) = msg
-          _ <- receive(s, fa, context).foldZIO(
-                e => ZIO.log(s"${e}") *> promise.fail(e) *> ZIO.unit,
-                sa => state.set(sa._1) *> promise.succeed(sa._2) *> ZIO.unit
+          // 缓存了这个ZIO，后面用到了两个地方。
+          receiver      = receive(s, fa, context)
+          // tupled是一个函数参数转换：从 (s, a) => {} 到 sa => {}，两个参数变成一个参数
+          completer     = ((s: S, a: A) => state.set(s) *> promise.succeed(a)).tupled
+          _ <- receiver.foldZIO(
+                e => {
+                  supervisor
+                    .supervise(receiver, e)
+                    .foldZIO(ee => promise.fail(ee), completer)
+                },
+                completer
               )
         } yield ()
       }
@@ -56,9 +65,10 @@ object Actor {
       } yield new Actor[F](queue)(optOutActorSystem)
     }
 
-    /*
+    
     // 很奇怪，process放在外面定义，会导致编译错误；放到里面定义就可以
-    private def process[A](
+    /*
+    private def process0[A](
       msg: AsyncMessage[F, A], 
       state: Ref[S], 
       supervisor: Supervisor[R],
