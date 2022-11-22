@@ -4,7 +4,7 @@ import sbt._
 object Dependencies {
 
   val ScalaCompactCollectionVersion = "2.8.1"
-  val ZioVersion                    = "2.0.3"
+  val ZioVersion                    = "2.0.4"
   val ZioNioVersion                 = "2.0.0"
   val ZioConfigVersion              = "3.0.2"
 

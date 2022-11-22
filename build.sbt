@@ -24,7 +24,7 @@ lazy val zioActor = (project in file("actor"))
   )
   .settings(
     testFrameworks += new TestFramework("zio.test.sbt.ZTestFramework"),
-    libraryDependencies ++= Seq(`zio`, `zio-nio`, `zio-config`, `zio-config-typesafe`, `zio-test`, `zio-test-sbt`),
+    libraryDependencies ++= Seq(`zio`, `zio-streams`, `zio-nio`, `zio-config`, `zio-config-typesafe`, `zio-test`, `zio-test-sbt`),
   )
 
 lazy val zioActorExample = (project in file("examples"))

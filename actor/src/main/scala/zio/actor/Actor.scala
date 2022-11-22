@@ -47,6 +47,7 @@ object Actor {
           completer     = ((s: S, a: A) => state.set(s) *> promise.succeed(a)).tupled
           _ <- receiver.foldZIO(
                 e => {
+                  // ZIO.log(e.getMessage) *>
                   supervisor
                     .supervise(receiver, e)
                     .foldZIO(ee => promise.fail(ee), completer)

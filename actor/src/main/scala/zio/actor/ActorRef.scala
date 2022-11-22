@@ -22,17 +22,17 @@ private[actor] sealed abstract class ActorRefSerial[-F[+_]](private var fullName
   import Utils._
 
   @throws[IOException]
-  def writeObject(out: ObjectOutputStream): Unit =
+  def writeObject1(out: ObjectOutputStream): Unit =
     out.writeObject(fullName)
 
   @throws[IOException]
-  def readObject(in: ObjectInputStream):Unit = {
+  def readObject1(in: ObjectInputStream):Unit = {
     val rawValue = in.readObject()
     fullName = rawValue.asInstanceOf[String]
   }
 
   @throws[ObjectStreamException]
-  def readResolve(): Object = {
+  def readResolve1(): Object = {
     val remoteRefZIO = for {
       resolved      <- resolveActorURI(fullName)
       (_, remote, _) = resolved
@@ -58,6 +58,18 @@ private[actor] final class ActorRefLocal[-F[+_]](
   override def ![A](fa: F[A]): Task[Unit] = actor ! fa
 
   override val stop: Task[Chunk[_]] = actor.stop
+
+  @throws[IOException]
+  private def writeObject(out: ObjectOutputStream): Unit =
+    super.writeObject1(out)
+
+  @throws[IOException]
+  private def readObject(in: ObjectInputStream): Unit =
+    super.readObject1(in)
+
+  @throws[ObjectStreamException]
+  private def readResolve(): Object =
+    super.readResolve1()
 }
 
 private[actor] final class ActorRefRemote[-F[+_]](
@@ -86,4 +98,16 @@ private[actor] final class ActorRefRemote[-F[+_]](
         result   <- ZIO.fromEither(response)
       } yield result
     }
+
+  @throws[IOException]
+  private def writeObject(out: ObjectOutputStream): Unit =
+    super.writeObject1(out)
+
+  @throws[IOException]
+  private def readObject(in: ObjectInputStream): Unit =
+    super.readObject1(in)
+
+  @throws[ObjectStreamException]
+  private def readResolve(): Object =
+    super.readResolve1()
 }
