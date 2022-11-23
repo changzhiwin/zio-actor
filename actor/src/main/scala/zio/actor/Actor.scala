@@ -1,9 +1,8 @@
 package zio.actor
 
-import zio.{ Supervisor => _, _ }
-import zio.actor.Command.{ Ask, Tell, Stop }
-
-import Actor.AsyncMessage
+import zio.actor.Actor.AsyncMessage
+import zio.actor.Command.{Ask, Stop, Tell}
+import zio.{Supervisor => _, _}
 
 object Actor {
 
@@ -15,7 +14,7 @@ object Actor {
       supervisor: Supervisor[R],
       context: Context,
       optOutActorSystem: () => Task[Unit],
-      mailboxSize: Int = 10000
+      mailboxSize: Int = 10000,
     )(init: S): RIO[R, Actor[F]]
 
   }
@@ -30,12 +29,12 @@ object Actor {
       supervisor: Supervisor[R],
       context: Context,
       optOutActorSystem: () => Task[Unit],
-      mailboxSize: Int = 10000
+      mailboxSize: Int = 10000,
     )(init: S): RIO[R, Actor[F]] = {
 
       def process[A](
-        msg: AsyncMessage[F, A], 
-        state: Ref[S]
+        msg: AsyncMessage[F, A],
+        state: Ref[S],
       ): RIO[R, Unit] = {
         for {
           s <- state.get
@@ -45,33 +44,32 @@ object Actor {
           receiver      = receive(s, fa, context)
           // tupled是一个函数参数转换：从 (s, a) => {} 到 sa => {}，两个参数变成一个参数
           completer     = ((s: S, a: A) => state.set(s) *> promise.succeed(a)).tupled
-          _ <- receiver.foldZIO(
-                e => {
-                  // ZIO.log(e.getMessage) *>
-                  supervisor
-                    .supervise(receiver, e)
-                    .foldZIO(ee => promise.fail(ee), completer)
-                },
-                completer
-              )
+          _            <- receiver.foldZIO(
+                            e => {
+                              // ZIO.log(e.getMessage) *>
+                              supervisor
+                                .supervise(receiver, e)
+                                .foldZIO(ee => promise.fail(ee), completer)
+                            },
+                            completer,
+                          )
         } yield ()
       }
 
       for {
         state <- Ref.make(init)
         queue <- Queue.bounded[AsyncMessage[F, _]](mailboxSize)
-        _     <- (queue.take.flatMap { msg =>
+        _     <- queue.take.flatMap { msg =>
                    process(msg, state)
-                 }).forever.fork
+                 }.forever.fork
       } yield new Actor[F](queue)(optOutActorSystem)
     }
 
-    
     // 很奇怪，process放在外面定义，会导致编译错误；放到里面定义就可以
     /*
     private def process0[A](
-      msg: AsyncMessage[F, A], 
-      state: Ref[S], 
+      msg: AsyncMessage[F, A],
+      state: Ref[S],
       supervisor: Supervisor[R],
       context: Context
     ): RIO[R, Unit] = {
@@ -85,14 +83,14 @@ object Actor {
             )
       } yield ()
     }
-    */
+     */
   }
 
 }
 
 // 注意private声明，class Actor本身是不对外暴漏的
 private[actor] final class Actor[-F[+_]](
-  queue: Queue[AsyncMessage[F, _]]
+  queue: Queue[AsyncMessage[F, _]],
 )(optOutActorSystem: () => Task[Unit]) {
 
   // 请求 & 响应

@@ -1,13 +1,13 @@
 package zio.actor
 
-import zio.{ Supervisor => _, _ }
-import Utils._
-import Actor.Stateful
+import zio.actor.Actor.Stateful
+import zio.actor.Utils._
+import zio.{Supervisor => _, _}
 
 final class Context private[actor] (
   uri: String,
   actorSystem: ActorSystem,
-  childrenRef: Ref[Set[ActorRef[Any]]]
+  childrenRef: Ref[Set[ActorRef[Any]]],
 ) {
 
   def self[F[+_]]: Task[ActorRef[F]] = actorSystem.select(uri)
@@ -16,9 +16,9 @@ final class Context private[actor] (
     actorName: String,
     sup: Supervisor[R],
     initialState: S,
-    stateful: Stateful[R, S, F1]
+    stateful: Stateful[R, S, F1],
   ): ZIO[R, Throwable, ActorRef[F1]] = for {
-    solved   <- resolveActorURI(uri)             // (systemName, remote, actorPath)
+    solved   <- resolveActorURI(uri) // (systemName, remote, actorPath)
     actorRef <- actorSystem.make(actorName, sup, initialState, stateful, Some(solved._3))
     _        <- childrenRef.update(_ + actorRef.asInstanceOf[ActorRef[Any]])
   } yield actorRef

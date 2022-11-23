@@ -1,13 +1,12 @@
 package zio.actor
 
-import java.util.concurrent.atomic.AtomicBoolean
-
-import zio.{ Chunk, IO, Ref, Schedule, Task, UIO, ZIO }
+import zio.actor.Actor.Stateful
 import zio.stream.ZStream
-import zio.test._
 import zio.test.Assertion._
+import zio.test._
+import zio.{Supervisor => _, _}
 
-import Actor.Stateful
+import java.util.concurrent.atomic.AtomicBoolean
 
 object CounterUtils {
   sealed trait Message[+A]
@@ -37,12 +36,12 @@ object ActorSpec extends ZIOSpecDefault {
         override def receive[A](
           state: Int,
           msg: Message[A],
-          contet: Context
+          contet: Context,
         ): UIO[(Int, A)] = msg match {
-          case Reset               => ZIO.succeed( 0 -> () )
-          case Increase            => ZIO.succeed( (state + 1) -> () )
-          case Get                 => ZIO.succeed( state -> state )
-          case IncreaseUpTo(upper) => ZIO.succeed( upper -> ZStream.fromIterable(state until upper) )
+          case Reset               => ZIO.succeed(0 -> ())
+          case Increase            => ZIO.succeed((state + 1) -> ())
+          case Get                 => ZIO.succeed(state -> state)
+          case IncreaseUpTo(upper) => ZIO.succeed(upper -> ZStream.fromIterable(state until upper))
         }
       }
 
@@ -70,9 +69,9 @@ object ActorSpec extends ZIOSpecDefault {
           override def receive[A](
             state: Unit,
             msg: Message[A],
-            context: Context
+            context: Context,
           ): Task[(Unit, A)] = msg match {
-            case Tick => 
+            case Tick =>
               ref
                 .updateAndGet(_ + 1)
                 .flatMap { v =>
@@ -99,7 +98,7 @@ object ActorSpec extends ZIOSpecDefault {
         override def receive[A](
           state: Unit,
           msg: Message[A],
-          context: Context
+          context: Context,
         ): IO[Throwable, (Unit, A)] = msg match {
           case Tick => ZIO.fail(new Exception("I'm fail."))
         }
@@ -109,7 +108,7 @@ object ActorSpec extends ZIOSpecDefault {
       val schedule = Schedule.recurs(10)
       val policy   = Supervisor.retryOrElse[Any, Long](
         schedule,
-        (e, _) => ZIO.log(e.getMessage) *> ZIO.succeed(called.set(true))
+        (e, _) => ZIO.log(e.getMessage) *> ZIO.succeed(called.set(true)),
       )
 
       val program = for {
@@ -127,7 +126,7 @@ object ActorSpec extends ZIOSpecDefault {
         override def receive[A](
           state: Unit,
           msg: Message[A],
-          context: Context
+          context: Context,
         ): IO[Throwable, (Unit, A)] = msg match {
           case Letter => ZIO.succeed(() -> ())
         }
@@ -147,7 +146,7 @@ object ActorSpec extends ZIOSpecDefault {
         override def receive[A](
           state: Unit,
           msg: Message[A],
-          context: Context
+          context: Context,
         ): IO[Throwable, (Unit, A)] = msg match {
           case Tick => ZIO.succeed(() -> ())
         }
@@ -167,7 +166,7 @@ object ActorSpec extends ZIOSpecDefault {
         override def receive[A](
           state: Unit,
           msg: Message[A],
-          context: Context
+          context: Context,
         ): IO[Throwable, (Unit, A)] = msg match {
           case Tick => ZIO.succeed(() -> ())
         }
@@ -182,14 +181,14 @@ object ActorSpec extends ZIOSpecDefault {
 
       assertZIO(program.exit)(
         fails(isSubtype[Throwable](anything)) &&
-        fails(
-          hasField[Throwable, String](
-            "message",
-            _.getMessage,
-            equalTo("No such actor /actor5")
-          )
-        )
+          fails(
+            hasField[Throwable, String](
+              "message",
+              _.getMessage,
+              equalTo("No such actor /actor5"),
+            ),
+          ),
       )
-    }
+    },
   )
 }

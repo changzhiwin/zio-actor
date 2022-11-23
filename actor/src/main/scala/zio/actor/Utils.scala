@@ -1,17 +1,17 @@
 package zio.actor
 
-import java.io.{ ByteArrayInputStream, ObjectInputStream, ByteArrayOutputStream, ObjectOutputStream }
-import java.nio.ByteBuffer
-
 import zio._
 import zio.nio.channels.AsynchronousSocketChannel
-import zio.nio.{ Buffer, InetAddress, InetSocketAddress }
+import zio.nio.{Buffer, InetAddress, InetSocketAddress}
+
+import java.io.{ByteArrayInputStream, ByteArrayOutputStream, ObjectInputStream, ObjectOutputStream}
+import java.nio.ByteBuffer
 
 private[actor] object Utils {
 
   import ActorConfig._
 
-  private val RegexName = 
+  private val RegexName =
     "[\\w+|\\d+|(\\-_.*$+:@&=,!~';.)|\\/]+".r
 
   private val RegexAcotrURI =
@@ -24,10 +24,14 @@ private[actor] object Utils {
         val host            = value.group(2)
         val port            = value.group(3).toInt
         val actorName       = "/" + value.group(4)
-        ZIO.succeed( (actorSystemName, RemoteConfig(host, port), actorName) )
+        ZIO.succeed((actorSystemName, RemoteConfig(host, port), actorName))
       }
-      case _                                    => 
-        ZIO.fail(new java.lang.Exception("Invalid Actor URI, must [zio://YOUR_ACTOR_SYSTEM_NAME@HOST:PORT/RELATIVE_ACTOR_PATH]"))
+      case _                                    =>
+        ZIO.fail(
+          new java.lang.Exception(
+            "Invalid Actor URI, must [zio://YOUR_ACTOR_SYSTEM_NAME@HOST:PORT/RELATIVE_ACTOR_PATH]",
+          ),
+        )
     }
 
   def buildAbsolutePath(parentActorName: String, actorName: String): Task[String] =
@@ -39,17 +43,19 @@ private[actor] object Utils {
     }
 
   def buildActorURI(actorSystemName: String, actorPath: String, remoteConfig: Option[RemoteConfig]): String =
-    s"zio://${actorSystemName}@${remoteConfig.fold("0.0.0.0:0000")(c => (c.host + ":" + c.port))}${actorPath}"
+    s"zio://${actorSystemName}@${remoteConfig.fold("0.0.0.0:0000")(c => c.host + ":" + c.port)}${actorPath}"
 
   def objFromByteArray(bytes: Array[Byte]): Task[Any] =
     ZIO.scoped {
-      ZIO.fromAutoCloseable(
-        ZIO.attempt(
-          new ObjectInputStream(new ByteArrayInputStream(bytes))
+      ZIO
+        .fromAutoCloseable(
+          ZIO.attempt(
+            new ObjectInputStream(new ByteArrayInputStream(bytes)),
+          ),
         )
-      ).flatMap { s =>
-        ZIO.attempt(s.readObject())
-      }
+        .flatMap { s =>
+          ZIO.attempt(s.readObject())
+        }
     }
 
   def readFromRemote(socket: AsynchronousSocketChannel): Task[Any] =
@@ -67,13 +73,15 @@ private[actor] object Utils {
     for {
       stream <- ZIO.succeed(new ByteArrayOutputStream())
       bytes  <- ZIO.scoped {
-                  ZIO.fromAutoCloseable(
-                    ZIO.attempt(
-                      new ObjectOutputStream(stream)
+                  ZIO
+                    .fromAutoCloseable(
+                      ZIO.attempt(
+                        new ObjectOutputStream(stream),
+                      ),
                     )
-                  ).flatMap { s =>
-                    ZIO.attempt(s.writeObject(obj)) *> ZIO.succeed(stream.toByteArray)
-                  }
+                    .flatMap { s =>
+                      ZIO.attempt(s.writeObject(obj)) *> ZIO.succeed(stream.toByteArray)
+                    }
                 }
       _      <- ZIO.attempt(stream.close())
     } yield bytes

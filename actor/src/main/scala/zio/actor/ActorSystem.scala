@@ -1,12 +1,11 @@
 package zio.actor
 
-import zio.{ Supervisor => _, _ }
-import zio.nio.channels.{ AsynchronousServerSocketChannel }
-import zio.nio.{ Buffer, InetAddress, InetSocketAddress }
-
-import ActorConfig._
-import Utils._
-import Actor._
+import zio.actor.Actor._
+import zio.actor.ActorConfig._
+import zio.actor.Utils._
+import zio.nio.channels.AsynchronousServerSocketChannel
+import zio.nio.{Buffer, InetAddress, InetSocketAddress}
+import zio.{Supervisor => _, _}
 
 object ActorSystem {
 
@@ -15,14 +14,16 @@ object ActorSystem {
       actorMap     <- Ref.make(Map.empty[String, Actor[Any]])
       remoteConfig <- ActorConfig.getRemoteConfig(sysName)
       actorSystem  <- ZIO.attempt(new ActorSystem(sysName, remoteConfig, actorMap))
-      _            <- remoteConfig.fold[Task[Unit]](ZIO.logWarning("No listen port, only work locally."))(c => actorSystem.receiveLoop(c.host, c.port))
+      _            <- remoteConfig.fold[Task[Unit]](ZIO.logWarning("No listen port, only work locally."))(c =>
+                        actorSystem.receiveLoop(c.host, c.port),
+                      )
     } yield actorSystem
 }
 
 final class ActorSystem private[actor] (
   val actorSystemName: String,
   remoteConfig: Option[RemoteConfig],
-  actorMap: Ref[Map[String, _ <: Actor[Any]]],   // 限制value是Actor[Any]子类或本身类型
+  actorMap: Ref[Map[String, _ <: Actor[Any]]], // 限制value是Actor[Any]子类或本身类型
 ) { self =>
 
   def make[R, S, F[+_]](
@@ -30,20 +31,20 @@ final class ActorSystem private[actor] (
     sup: Supervisor[R],
     initialState: S,
     stateful: AbstractStateful[R, S, F],
-    parent: Option[String] = None
+    parent: Option[String] = None,
   ): ZIO[R, Throwable, ActorRef[F]] = {
 
     for {
-      map         <- actorMap.get
-      actorPath   <- buildAbsolutePath(parent.getOrElse(""), actorName)
-      _           <- ZIO.fail(new Exception(s"Actor ${actorPath} already exists.")).when(map.contains(actorPath))
+      map       <- actorMap.get
+      actorPath <- buildAbsolutePath(parent.getOrElse(""), actorName)
+      _         <- ZIO.fail(new Exception(s"Actor ${actorPath} already exists.")).when(map.contains(actorPath))
 
       uri          = buildActorURI(actorSystemName, actorPath, remoteConfig)
       childrenRef <- Ref.make(Set.empty[ActorRef[Any]])
       actor       <- stateful.makeActor(
-                       sup, 
+                       sup,
                        new Context(uri, self, childrenRef),
-                       () => self.dropFromActorMap(uri, childrenRef)
+                       () => self.dropFromActorMap(uri, childrenRef),
                      )(initialState)
       _           <- actorMap.update(_.concat(Map(actorPath -> actor.asInstanceOf[Actor[Any]])))
     } yield new ActorRefLocal[F](uri, actor)
@@ -65,15 +66,14 @@ final class ActorSystem private[actor] (
       (sysName, remote, actorPath) = solved
 
       actorRef <- ZIO.ifZIO(ZIO.succeed(sysName == actorSystemName))(
-                    onTrue  = {
+                    onTrue = {
                       for {
                         map   <- actorMap.get
-                        actor <- map.get(actorPath)
-                                    .fold[Task[Actor[F]]](
-                                      ZIO.fail(new Exception(s"No such actor ${actorPath}"))
-                                    )(
-                                      a => ZIO.attempt(a.asInstanceOf[Actor[F]])
-                                    )
+                        actor <- map
+                                   .get(actorPath)
+                                   .fold[Task[Actor[F]]](
+                                     ZIO.fail(new Exception(s"No such actor ${actorPath}")),
+                                   )(a => ZIO.attempt(a.asInstanceOf[Actor[F]]))
                       } yield new ActorRefLocal[F](uri, actor)
                     },
                     onFalse = {
@@ -81,7 +81,7 @@ final class ActorSystem private[actor] (
                         host    <- InetAddress.byName(remote.host)
                         address <- InetSocketAddress.inetAddress(host, remote.port)
                       } yield new ActorRefRemote[F](uri, address)
-                    }
+                    },
                   )
     } yield actorRef
   }
@@ -120,11 +120,11 @@ final class ActorSystem private[actor] (
       map        <- actorMap.get
       actorOpt   <- resolveActorURI(envelope.receiverURI).map(tp => map.get(tp._3))
       _          <- actorOpt.fold(
-                      writeToRemote(connection, Left(new Exception("No such remote actor")))
-                    )(
-                      actor => actor.unsafeOp(envelope.command).either.flatMap { eh =>
+                      writeToRemote(connection, Left(new Exception("No such remote actor"))),
+                    )(actor =>
+                      actor.unsafeOp(envelope.command).either.flatMap { eh =>
                         writeToRemote(connection, eh)
-                      }
+                      },
                     )
     } yield ()
   }

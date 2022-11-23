@@ -1,10 +1,10 @@
 package zio.actor
 
-import java.io.{ IOException, ObjectStreamException, ObjectOutputStream, ObjectInputStream }
-
-import zio.nio.channels.AsynchronousSocketChannel
-import zio.nio.{ InetAddress, InetSocketAddress }
 import zio._
+import zio.nio.channels.AsynchronousSocketChannel
+import zio.nio.{InetAddress, InetSocketAddress}
+
+import java.io.{IOException, ObjectInputStream, ObjectOutputStream, ObjectStreamException}
 
 sealed trait ActorRef[-F[+_]] extends Serializable {
 
@@ -28,7 +28,7 @@ private[actor] sealed abstract class ActorRefSerial[-F[+_]](private var fullName
     out.writeObject(fullName)
 
   @throws[IOException]
-  protected def readObject1(in: ObjectInputStream):Unit = {
+  protected def readObject1(in: ObjectInputStream): Unit = {
     val rawValue = in.readObject()
     fullName = rawValue.asInstanceOf[String]
   }
@@ -53,7 +53,7 @@ private[actor] sealed abstract class ActorRefSerial[-F[+_]](private var fullName
 
 private[actor] final class ActorRefLocal[-F[+_]](
   actorName: String,
-  actor: Actor[F]
+  actor: Actor[F],
 ) extends ActorRefSerial[F](actorName) {
 
   override def ?[A](fa: F[A]): Task[A] = actor ? fa
@@ -62,7 +62,6 @@ private[actor] final class ActorRefLocal[-F[+_]](
 
   override val stop: Task[Chunk[_]] = actor.stop
 
-   
   @throws[IOException]
   private def writeObject(out: ObjectOutputStream): Unit =
     super.writeObject1(out)
@@ -74,7 +73,7 @@ private[actor] final class ActorRefLocal[-F[+_]](
 
 private[actor] final class ActorRefRemote[-F[+_]](
   actorName: String,
-  address: InetSocketAddress
+  address: InetSocketAddress,
 ) extends ActorRefSerial[F](actorName) {
 
   import Utils._
@@ -83,8 +82,8 @@ private[actor] final class ActorRefRemote[-F[+_]](
 
   override def ![A](fa: F[A]): Task[Unit] = sendEnvelope[Unit](Command.Tell(fa))
 
-  override val stop: Task[Chunk[_]] = sendEnvelope[Chunk[_]](Command.Stop) 
-  
+  override val stop: Task[Chunk[_]] = sendEnvelope[Chunk[_]](Command.Stop)
+
   private def sendEnvelope[A](command: Command): Task[A] =
     ZIO.scoped {
       for {
@@ -94,7 +93,7 @@ private[actor] final class ActorRefRemote[-F[+_]](
                       receiverURI <- uri
                       _           <- writeToRemote(client, Envelope(command, receiverURI))
                       response    <- readFromRemote(client)
-                    } yield response.asInstanceOf[Either[Throwable, A]]   // 因为发送端都转化成Either对象
+                    } yield response.asInstanceOf[Either[Throwable, A]] // 因为发送端都转化成Either对象
         result   <- ZIO.fromEither(response)
       } yield result
     }

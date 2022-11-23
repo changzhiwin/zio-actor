@@ -1,12 +1,12 @@
 package examples
 
+import zio.actor.{Actor, ActorSystem, Context, Supervisor}
+import zio.{Supervisor => _, _}
+
 import java.time.Instant
 
-import zio.{ Supervisor => _, _ }
-import zio.actor.{ActorSystem, Actor, Context, Supervisor}
-
 object ShoppingCart extends ZIOAppDefault {
-  
+
   // 业务模型
   final case class State(items: Map[String, Int], checkoutDate: Option[Instant]) {
 
@@ -55,29 +55,29 @@ object ShoppingCart extends ZIOAppDefault {
   val shopping = new Actor.Stateful[Any, State, Command] {
     override def receive[A](state: State, msg: Command[A], context: Context): UIO[(State, A)] = {
       msg match {
-        case AddItem(itemId, quantity) => {
-          val st = state.updateItem(itemId, quantity)
+        case AddItem(itemId, quantity)            => {
+          val st      = state.updateItem(itemId, quantity)
           val summary = st.toSummary
-          ZIO.succeed( (st, Accepted(summary)) )
+          ZIO.succeed((st, Accepted(summary)))
         }
-        case RemoveItem(itemId)    => {
-          val st = state.removeItem(itemId)
+        case RemoveItem(itemId)                   => {
+          val st      = state.removeItem(itemId)
           val summary = st.toSummary
-          ZIO.succeed( (st, Accepted(summary)) )
+          ZIO.succeed((st, Accepted(summary)))
         }
         case AdjustItemQuantity(itemId, quantity) => {
-          val state1 = state.removeItem(itemId)
-          val state2 = state1.updateItem(itemId, quantity)
+          val state1  = state.removeItem(itemId)
+          val state2  = state1.updateItem(itemId, quantity)
           val summary = state2.toSummary
-          ZIO.succeed( (state2, Accepted(summary)) )
+          ZIO.succeed((state2, Accepted(summary)))
         }
-        case Checkout => {
-          val st = state.checkout(Instant.now())
+        case Checkout                             => {
+          val st      = state.checkout(Instant.now())
           val summary = st.toSummary
-          ZIO.succeed( (st, Accepted(summary)) )
+          ZIO.succeed((st, Accepted(summary)))
         }
-        case Get => {
-          ZIO.succeed( (state, state.toSummary) )
+        case Get                                  => {
+          ZIO.succeed((state, state.toSummary))
         }
       }
     }

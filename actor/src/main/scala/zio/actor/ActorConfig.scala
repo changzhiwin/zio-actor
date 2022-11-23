@@ -1,9 +1,9 @@
 package zio.actor
 
+import zio._
 import zio.config.ConfigDescriptor
 import zio.config.ConfigDescriptor._
 import zio.config.typesafe.TypesafeConfig
-import zio._
 
 private[actor] object ActorConfig {
 
@@ -21,13 +21,15 @@ private[actor] object ActorConfig {
       }
     }
 
-  def getConfig[T : Tag](
+  def getConfig[T: Tag](
     systemName: String,
-    configDescriptor: ConfigDescriptor[T]
+    configDescriptor: ConfigDescriptor[T],
   ): Task[T] =
-    ZIO.service[T].provideLayer(
-      TypesafeConfig.fromResourcePath(prefixSystemConfig(systemName, configDescriptor))
-    )
+    ZIO
+      .service[T]
+      .provideLayer(
+        TypesafeConfig.fromResourcePath(prefixSystemConfig(systemName, configDescriptor)),
+      )
 
   def getRemoteConfig(systemName: String): Task[Option[RemoteConfig]] =
     getConfig(systemName, remoteConfig)
