@@ -35,7 +35,7 @@ final class ActorSystem private[actor] (
 
     for {
       map         <- actorMap.get
-      actorPath   <- buildAbsolutePath(parent.getOrElse(""), actorName).debug("actorPath")
+      actorPath   <- buildAbsolutePath(parent.getOrElse(""), actorName)
       _           <- ZIO.fail(new Exception(s"Actor ${actorPath} already exists.")).when(map.contains(actorPath))
 
       uri          = buildActorURI(actorSystemName, actorPath, remoteConfig)
@@ -89,7 +89,7 @@ final class ActorSystem private[actor] (
   def shutdown: Task[List[_]] = {
     for {
       map  <- actorMap.get
-      undo <- ZIO.foreach(map.values.toList)(_.asInstanceOf[Actor[Any]].stop)  // TODO, need Tag?
+      undo <- ZIO.foreach(map.values.toList)(_.asInstanceOf[Actor[Any]].stop)
     } yield undo.flatten
   }
 
@@ -100,7 +100,7 @@ final class ActorSystem private[actor] (
       p       <- Promise.make[Nothing, Unit]
       _       <- self.listenFiber(address, p).fork
       _       <- p.await
-      _       <- ZIO.log(s"ActorSystem-${actorSystemName}, listen at ${host}:${port}")
+      _       <- ZIO.log(s"System(${actorSystemName}), listen at ${host}:${port}")
     } yield ()
   }
 

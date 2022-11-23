@@ -98,12 +98,11 @@ object RemoteSpec extends ZIOSpecDefault {
         test("ActorRef serialization case") {
           for {
             actorSystem3 <- ActorSystem("remote3")
-            actor3       <- actorSystem3.make("actor3", Supervisor.none, (), protoHandler())
+            _            <- actorSystem3.make("actor3", Supervisor.none, (), protoHandler())
             actorSystem4 <- ActorSystem("remote4")
             actor4       <- actorSystem4.make("actor4", Supervisor.none, (), protoHandler())
-
-            // TODO，actor4是Local的？
-            _            <- actor3 ? GameInit(actor4)
+            remoteActor3 <- actorSystem4.select[PingPongProto]("zio://remote3@0.0.0.0:8003/actor3")
+            _            <- remoteActor3 ? GameInit(actor4)
             _            <- TestClock.adjust(5.seconds)
             output       <- TestConsole.output
           } yield assertTrue(
@@ -145,8 +144,8 @@ object RemoteSpec extends ZIOSpecDefault {
             actorSystem1 <- ActorSystem("remote8")
             _            <- actorSystem1.make("actor8", Supervisor.none, (), errorHandler)
             actorSystem2 <- ActorSystem("remote9")
-            actorRef     <- actorSystem2.select[ErrorProto]("zio://remote8@0.0.0.0:8008/actor8")
-            _            <- actorRef ? UnsafeMessage
+            remoteRef     <- actorSystem2.select[ErrorProto]("zio://remote8@0.0.0.0:8008/actor8")
+            _            <- remoteRef ? UnsafeMessage
           } yield ()
 
           assertZIO(program.exit)(

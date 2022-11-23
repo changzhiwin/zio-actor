@@ -65,7 +65,6 @@ private[actor] object Utils {
 
   def objToByteArray(obj: Any): Task[Array[Byte]] =
     for {
-      _      <- ZIO.debug(obj)
       stream <- ZIO.succeed(new ByteArrayOutputStream())
       bytes  <- ZIO.scoped {
                   ZIO.fromAutoCloseable(
