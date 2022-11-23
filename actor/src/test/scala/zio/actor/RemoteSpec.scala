@@ -36,7 +36,7 @@ object SpecUtils {
   case object Pong                                        extends PingPongProto[Unit]
   case class GameInit(recipient: ActorRef[PingPongProto]) extends PingPongProto[Unit]
 
-  def protoHandler(): Stateful[Any, Unit, PingPongProto] = new Stateful[Any, Unit, PingPongProto] {
+  val protoHandler: Stateful[Any, Unit, PingPongProto] = new Stateful[Any, Unit, PingPongProto] {
 
     override def receive[A](
       state: Unit,
@@ -98,9 +98,9 @@ object RemoteSpec extends ZIOSpecDefault {
         test("ActorRef serialization case") {
           for {
             actorSystem3 <- ActorSystem("remote3")
-            _            <- actorSystem3.make("actor3", Supervisor.none, (), protoHandler())
+            _            <- actorSystem3.make("actor3", Supervisor.none, (), protoHandler)
             actorSystem4 <- ActorSystem("remote4")
-            actor4       <- actorSystem4.make("actor4", Supervisor.none, (), protoHandler())
+            actor4       <- actorSystem4.make("actor4", Supervisor.none, (), protoHandler)
             remoteActor3 <- actorSystem4.select[PingPongProto]("zio://remote3@0.0.0.0:8003/actor3")
             _            <- remoteActor3 ? GameInit(actor4)
             _            <- TestClock.adjust(5.seconds)
