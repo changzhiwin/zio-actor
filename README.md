@@ -6,7 +6,7 @@
 - 队列消除同步等待
 - 独立线程执行对消息的处理，ZIO中使用Fiber
 - 对状态的改变，封装在Actor内部；外部无法直接访问
-![how actor work](./design/how-actor-work.png)
+![how actor work](./design/actor.png)
 
 以上一个Actor的内部结构，Actor运行在ActorSystem环境中，而ActorSystem可以存在很多个（一个进程、多个进程都可以）。
 ![actor system](./design/actor-system.png)
