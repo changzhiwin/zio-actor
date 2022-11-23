@@ -21,18 +21,21 @@ private[actor] sealed abstract class ActorRefSerial[-F[+_]](private var fullName
 
   import Utils._
 
+  // https://blog.csdn.net/Leon_cx/article/details/81517603
+  // 实现都一样，但具体到某个类，read/write需要是私有method，所以就有下面两个类中相同的重复代码
   @throws[IOException]
-  def writeObject1(out: ObjectOutputStream): Unit =
+  protected def writeObject1(out: ObjectOutputStream): Unit =
     out.writeObject(fullName)
 
   @throws[IOException]
-  def readObject1(in: ObjectInputStream):Unit = {
+  protected def readObject1(in: ObjectInputStream):Unit = {
     val rawValue = in.readObject()
     fullName = rawValue.asInstanceOf[String]
   }
 
+  // 这个方法私有、或者继承都可以的
   @throws[ObjectStreamException]
-  def readResolve1(): Object = {
+  protected def readResolve(): Object = {
     val remoteRefZIO = for {
       resolved      <- resolveActorURI(fullName)
       (_, remote, _) = resolved
@@ -59,6 +62,7 @@ private[actor] final class ActorRefLocal[-F[+_]](
 
   override val stop: Task[Chunk[_]] = actor.stop
 
+   
   @throws[IOException]
   private def writeObject(out: ObjectOutputStream): Unit =
     super.writeObject1(out)
@@ -66,10 +70,6 @@ private[actor] final class ActorRefLocal[-F[+_]](
   @throws[IOException]
   private def readObject(in: ObjectInputStream): Unit =
     super.readObject1(in)
-
-  @throws[ObjectStreamException]
-  private def readResolve(): Object =
-    super.readResolve1()
 }
 
 private[actor] final class ActorRefRemote[-F[+_]](
@@ -106,8 +106,4 @@ private[actor] final class ActorRefRemote[-F[+_]](
   @throws[IOException]
   private def readObject(in: ObjectInputStream): Unit =
     super.readObject1(in)
-
-  @throws[ObjectStreamException]
-  private def readResolve(): Object =
-    super.readResolve1()
 }
